@@ -1,0 +1,140 @@
+services:
+  # Bases de datos
+  postgres:
+    image: postgres:15
+    container_name: microservices-postgres
+    environment:
+      POSTGRES_DB: userdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - microservices-network
+
+  mongodb:
+    image: mongo:7
+    container_name: microservices-mongo
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: mongo
+      MONGO_INITDB_ROOT_PASSWORD: mongo123
+      MONGO_INITDB_DATABASE: productdb
+    ports:
+      - '28017:27017'
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - microservices-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: microservices-redis
+    ports:
+      - '6379:6379'
+    command: redis-server --appendonly yes --requirepass redis123
+    volumes:
+      - redis_data:/data
+    networks:
+      - microservices-network
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ./microservices/api-gateway
+      dockerfile: Dockerfile
+    container_name: api-gateway
+    ports:
+      - '3000:3000'
+    environment:
+      - NODE_ENV=development
+      - USER_SERVICE_URL=http://user-service:3001
+      - PRODUCT_SERVICE_URL=http://product-service:3002
+      - NOTIFICATION_SERVICE_URL=http://notification-service:3003
+    depends_on:
+      - user-service
+      - product-service
+      - notification-service
+    networks:
+      - microservices-network
+    volumes:
+      - ./microservices/api-gateway:/app
+      - /app/node_modules
+    command: npm run start:dev
+
+  # User Service
+  user-service:
+    build:
+      context: ./microservices/user-service
+      dockerfile: Dockerfile
+    container_name: user-service
+    ports:
+      - '3001:3001'
+    environment:
+      - NODE_ENV=development
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=userdb
+      - DATABASE_USER=postgres
+      - DATABASE_PASSWORD=postgres123
+      - JWT_SECRET=your-super-secret-jwt-key
+    depends_on:
+      - postgres
+    networks:
+      - microservices-network
+    volumes:
+      - ./microservices/user-service:/app
+      - /app/node_modules
+    command: npm run start:dev
+
+  # Product Service
+  product-service:
+    build:
+      context: ./microservices/product-service
+      dockerfile: Dockerfile
+    container_name: product-service
+    ports:
+      - '3002:3002'
+    environment:
+      - NODE_ENV=development
+      - MONGODB_URI=mongodb://mongo:mongo123@mongodb:27017/productdb?authSource=admin
+    depends_on:
+      - mongodb
+    networks:
+      - microservices-network
+    volumes:
+      - ./microservices/product-service:/app
+      - /app/node_modules
+    command: npm run start:dev
+
+  # Notification Service
+  notification-service:
+    build:
+      context: ./microservices/notification-service
+      dockerfile: Dockerfile
+    container_name: notification-service
+    ports:
+      - '3003:3003'
+    environment:
+      - NODE_ENV=development
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=redis123
+    depends_on:
+      - redis
+    networks:
+      - microservices-network
+    volumes:
+      - ./microservices/notification-service:/app
+      - /app/node_modules
+    command: npm run start:dev
+
+volumes:
+  postgres_data:
+  mongodb_data:
+  redis_data:
+
+networks:
+  microservices-network:
+    driver: bridge
