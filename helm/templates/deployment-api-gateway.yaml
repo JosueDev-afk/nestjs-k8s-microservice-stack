@@ -1,0 +1,72 @@
+{{- $root := . -}}
+{{- $components := list
+  (dict "name" "api-gateway" "values" .Values.apiGateway)
+  (dict "name" "user-service" "values" .Values.userService)
+  (dict "name" "product-service" "values" .Values.productService)
+  (dict "name" "notification-service" "values" .Values.notificationService)
+}}
+{{- range $component := $components }}
+{{- $values := $component.values -}}
+{{- if $values }}
+{{- $name := $component.name -}}
+{{- $port := $values.service.port | default (ternary 3000 3000 (eq $name "api-gateway")) -}}
+{{- $hasEnv := and $values.env (gt (len $values.env) 0) -}}
+{{- $hasSecret := and $values.secretEnv (gt (len $values.secretEnv) 0) -}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nestjs-microservices.component" (dict "root" $root "name" $name) }}
+  labels:
+    {{- include "nestjs-microservices.componentLabels" (dict "root" $root "component" $name) | nindent 4 }}
+spec:
+  replicas: {{ $values.replicas | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "nestjs-microservices.componentSelectorLabels" (dict "root" $root "component" $name) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nestjs-microservices.componentSelectorLabels" (dict "root" $root "component" $name) | nindent 8 }}
+    spec:
+      {{- with $root.Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- range . }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
+      containers:
+        - name: {{ $name }}
+          image: {{ $values.image }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: {{ $port | default 3000 }}
+          {{- if or $hasEnv $hasSecret }}
+          envFrom:
+            {{- if $hasEnv }}
+            - configMapRef:
+                name: {{ include "nestjs-microservices.configMapName" (dict "root" $root "name" $name) }}
+            {{- end }}
+            {{- if $hasSecret }}
+            - secretRef:
+                name: {{ include "nestjs-microservices.secretName" (dict "root" $root "name" $name) }}
+            {{- end }}
+          {{- end }}
+          {{- if $values.resources }}
+          resources:
+            {{- toYaml $values.resources | nindent 12 }}
+          {{- end }}
+      {{- with $root.Values.global.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $root.Values.global.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $root.Values.global.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+{{- end }}

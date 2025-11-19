@@ -1,0 +1,6 @@
+apiVersion: v2
+name: nestjs-microservices
+description: Stack de microservicios NestJS (gateway + services + dbs)
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

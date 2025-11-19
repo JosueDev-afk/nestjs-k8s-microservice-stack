@@ -1,0 +1,99 @@
+global:
+  imagePullSecrets: []
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+apiGateway:
+  image: registry/api-gateway:v1
+  replicas: 2
+  service:
+    type: ClusterIP
+    port: 3000
+  env:
+    USER_SERVICE_URL: http://user-service:3001
+    PRODUCT_SERVICE_URL: http://product-service:3002
+    NOTIFICATION_SERVICE_URL: http://notification-service:3003
+  secretEnv:
+    JWT_SECRET: your-super-secret-jwt-key
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+
+userService:
+  image: registry/user-service:v1
+  service:
+    port: 3001
+  env:
+    DATABASE_HOST: postgres
+    DATABASE_PORT: "5432"
+    DATABASE_NAME: userdb
+    DATABASE_USER: postgres
+  secretEnv:
+    DATABASE_PASSWORD: postgres123
+    JWT_SECRET: your-super-secret-jwt-key
+
+productService:
+  image: registry/product-service:v1
+  service:
+    port: 3002
+  env: {}
+  secretEnv:
+    MONGODB_URI: mongodb://mongo:mongo123@mongodb:27017/productdb?authSource=admin
+
+notificationService:
+  image: registry/notification-service:v1
+  service:
+    port: 3003
+  env:
+    REDIS_HOST: redis
+    REDIS_PORT: "6379"
+  secretEnv:
+    REDIS_PASSWORD: redis123
+    JWT_SECRET: your-super-secret-jwt-key
+
+postgres:
+  enabled: true
+  image: postgres:15
+  storage: 5Gi
+  env:
+    POSTGRES_DB: userdb
+    POSTGRES_USER: postgres
+  secretEnv:
+    POSTGRES_PASSWORD: postgres123
+
+mongodb:
+  enabled: true
+  image: mongo:7
+  storage: 5Gi
+  env:
+    MONGO_INITDB_ROOT_USERNAME: mongo
+    MONGO_INITDB_DATABASE: productdb
+  secretEnv:
+    MONGO_INITDB_ROOT_PASSWORD: mongo123
+
+redis:
+  enabled: true
+  image: redis:7-alpine
+  env:
+    REDIS_USER: default
+  secretEnv:
+    REDIS_PASSWORD: redis123
+  storage: 2Gi
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: api.local
+      paths:
+        - path: /
+          pathType: Prefix
+          service: api-gateway
+          port: 3000
+  tls: []

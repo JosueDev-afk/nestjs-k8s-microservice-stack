@@ -1,5 +1,5 @@
 {
-  "name": "base_microservicios",
+  "name": "nestjs-k8s-microservice-stack",
   "version": "0.0.1",
   "description": "",
   "author": "",

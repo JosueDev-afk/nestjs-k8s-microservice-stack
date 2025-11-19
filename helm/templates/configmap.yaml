@@ -1,0 +1,26 @@
+{{- $root := . -}}
+{{- $components := list
+  (dict "name" "api-gateway" "values" .Values.apiGateway)
+  (dict "name" "user-service" "values" .Values.userService)
+  (dict "name" "product-service" "values" .Values.productService)
+  (dict "name" "notification-service" "values" .Values.notificationService)
+  (dict "name" "postgres" "values" .Values.postgres)
+  (dict "name" "mongodb" "values" .Values.mongodb)
+  (dict "name" "redis" "values" .Values.redis)
+}}
+{{- range $components }}
+{{- $env := .values.env -}}
+{{- if $env }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "nestjs-microservices.configMapName" (dict "root" $root "name" .name) }}
+  labels:
+    {{- include "nestjs-microservices.componentLabels" (dict "root" $root "component" .name) | nindent 4 }}
+data:
+  {{- range $key, $value := $env }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+{{- end }}
+{{- end }}
