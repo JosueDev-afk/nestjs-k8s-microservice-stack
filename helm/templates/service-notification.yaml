@@ -1,0 +1,20 @@
+{{- $root := . -}}
+{{- $component := "notification-service" -}}
+{{- $values := .Values.notificationService -}}
+{{- if $values }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "nestjs-microservices.component" (dict "root" $root "name" $component) }}
+  labels:
+    {{- include "nestjs-microservices.componentLabels" (dict "root" $root "component" $component) | nindent 4 }}
+spec:
+  type: {{ $values.service.type | default "ClusterIP" }}
+  ports:
+    - name: http
+      port: {{ $values.service.port | default 3003 }}
+      targetPort: {{ $values.service.port | default 3003 }}
+      protocol: TCP
+  selector:
+    {{- include "nestjs-microservices.componentSelectorLabels" (dict "root" $root "component" $component) | nindent 4 }}
+{{- end }}
