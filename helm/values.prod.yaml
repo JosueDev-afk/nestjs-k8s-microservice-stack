@@ -1,0 +1,84 @@
+global:
+  imagePullSecrets: [acr-pull-secret]
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+apiGateway:
+  image: myacr.azurecr.io/api-gateway:latest
+  replicas: 2
+  service:
+    type: ClusterIP
+    port: 3000
+  env:
+    USER_SERVICE_URL: http://user-service:3001
+    PRODUCT_SERVICE_URL: http://product-service:3002
+    NOTIFICATION_SERVICE_URL: http://notification-service:3003
+  secretEnv:
+    JWT_SECRET: prod-jwt-secret
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+
+userService:
+  image: myacr.azurecr.io/user-service:latest
+  replicas: 2
+  service:
+    port: 3001
+  env:
+    DATABASE_HOST: <postgres-host>
+    DATABASE_PORT: "5432"
+    DATABASE_NAME: userdb
+    DATABASE_USER: postgres
+  secretEnv:
+    DATABASE_PASSWORD: <postgres-password-secret>
+    JWT_SECRET: prod-jwt-secret
+
+productService:
+  image: myacr.azurecr.io/product-service:latest
+  replicas: 2
+  service:
+    port: 3002
+  env: {}
+  secretEnv:
+    MONGODB_URI: mongodb://<user>:<pass>@<mongo-host>:27017/productdb?authSource=admin
+
+notificationService:
+  image: myacr.azurecr.io/notification-service:latest
+  replicas: 2
+  service:
+    port: 3003
+  env:
+    REDIS_HOST: <redis-host>
+    REDIS_PORT: "6380"
+  secretEnv:
+    REDIS_PASSWORD: <redis-password-secret>
+    JWT_SECRET: prod-jwt-secret
+
+postgres:
+  enabled: false
+mongodb:
+  enabled: false
+redis:
+  enabled: false
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    kubernetes.io/ingress.class: nginx
+  hosts:
+    - host: api.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service: api-gateway
+          port: 3000
+  tls:
+    - hosts:
+        - api.example.com
+      secretName: api-example-com-tls

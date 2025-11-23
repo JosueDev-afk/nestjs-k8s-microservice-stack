@@ -12,6 +12,12 @@
 {{- $port := $values.service.port | default (ternary 3000 3000 (eq $name "api-gateway")) -}}
 {{- $hasEnv := and $values.env (gt (len $values.env) 0) -}}
 {{- $hasSecret := and $values.secretEnv (gt (len $values.secretEnv) 0) -}}
+{{- $localDb := $values.localDb -}}
+{{- $localDbEnabled := and $localDb $localDb.enabled -}}
+{{- $localDbVolumeName := "" -}}
+{{- if $localDbEnabled }}
+  {{- $localDbVolumeName = (default (printf "%s-db-data" $name) (and $localDb.volume $localDb.volume.name)) -}}
+{{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -56,6 +62,63 @@ spec:
           resources:
             {{- toYaml $values.resources | nindent 12 }}
           {{- end }}
+        {{- if $localDbEnabled }}
+        - name: {{ default (printf "%s-db" $name) $localDb.name }}
+          image: {{ $localDb.image }}
+          imagePullPolicy: {{ $localDb.imagePullPolicy | default "IfNotPresent" }}
+          {{- if $localDb.command }}
+          command:
+            {{- toYaml $localDb.command | nindent 12 }}
+          {{- end }}
+          {{- if $localDb.args }}
+          args:
+            {{- toYaml $localDb.args | nindent 12 }}
+          {{- end }}
+          {{- if $localDb.ports }}
+          ports:
+            {{- range $localDb.ports }}
+            - containerPort: {{ .containerPort | default .port }}
+              {{- if .name }}
+              name: {{ .name }}
+              {{- end }}
+            {{- end }}
+          {{- else if $localDb.port }}
+          ports:
+            - containerPort: {{ $localDb.port }}
+          {{- end }}
+          {{- if or $localDb.env $localDb.secretEnv }}
+          env:
+            {{- range $key, $value := $localDb.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- range $key, $value := $localDb.secretEnv }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          {{- end }}
+          {{- with $localDb.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- end }}
+      {{- if and $localDbEnabled (or $localDb.volume $localDb.volumeMounts) }}
+      volumes:
+        - name: {{ default (printf "%s-db-data" $name) (and $localDb.volume $localDb.volume.name) }}
+{{- $volume := $localDb.volume | default dict }}
+{{- if and $volume (hasKey $volume "emptyDir") }}
+          emptyDir:
+            {{- toYaml ($volume.emptyDir | default dict) | nindent 12 }}
+{{- else if and $volume (hasKey $volume "hostPath") }}
+          hostPath:
+            {{- toYaml $volume.hostPath | nindent 12 }}
+{{- else if and $volume (hasKey $volume "persistentVolumeClaim") }}
+          persistentVolumeClaim:
+            {{- toYaml $volume.persistentVolumeClaim | nindent 12 }}
+{{- else }}
+          emptyDir: {}
+{{- end }}
+      {{- end }}
       {{- with $root.Values.global.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
