@@ -1,0 +1,130 @@
+global:
+  imagePullSecrets: []
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+apiGateway:
+  image: api-gateway:dev
+  replicas: 1
+  service:
+    type: ClusterIP
+    port: 3000
+  env:
+    USER_SERVICE_URL: http://user-service:3001
+    PRODUCT_SERVICE_URL: http://product-service:3002
+    NOTIFICATION_SERVICE_URL: http://notification-service:3003
+  secretEnv:
+    JWT_SECRET: local-dev-jwt-secret
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+
+userService:
+  image: user-service:dev
+  service:
+    port: 3001
+  env:
+    DATABASE_HOST: localhost
+    DATABASE_PORT: "5432"
+    DATABASE_NAME: userdb
+    DATABASE_USER: postgres
+  secretEnv:
+    DATABASE_PASSWORD: postgres123
+    JWT_SECRET: local-dev-jwt-secret
+  localDb:
+    enabled: true
+    name: postgres
+    image: postgres:15
+    port: 5432
+    env:
+      POSTGRES_DB: userdb
+      POSTGRES_USER: postgres
+    secretEnv:
+      POSTGRES_PASSWORD: postgres123
+    volume:
+      name: user-db-data
+      emptyDir: {}
+    volumeMounts:
+      - name: user-db-data
+        mountPath: /var/lib/postgresql/data
+
+productService:
+  image: product-service:dev
+  service:
+    port: 3002
+  env: {}
+  secretEnv:
+    MONGODB_URI: mongodb://mongo:mongo123@localhost:27017/productdb?authSource=admin
+  localDb:
+    enabled: true
+    name: mongodb
+    image: mongo:7
+    port: 27017
+    env:
+      MONGO_INITDB_ROOT_USERNAME: mongo
+      MONGO_INITDB_DATABASE: productdb
+    limpio: false
+    secretEnv:
+      MONGO_INITDB_ROOT_PASSWORD: mongo123
+    volume:
+      name: product-db-data
+      emptyDir: {}
+    volumeMounts:
+      - name: product-db-data
+        mountPath: /data/db
+
+notificationService:
+  image: notification-service:dev
+  service:
+    port: 3003
+  env:
+    REDIS_HOST: localhost
+    REDIS_PORT: "6379"
+  secretEnv:
+    REDIS_PASSWORD: redis123
+    JWT_SECRET: local-dev-jwt-secret
+  localDb:
+    enabled: true
+    name: redis
+    image: redis:7-alpine
+    port: 6379
+    args:
+      - "--requirepass"
+      - "redis123"
+    env:
+      REDIS_USER: default
+    secretEnv:
+      REDIS_PASSWORD: redis123
+    volume:
+      name: notification-db-data
+      emptyDir: {}
+    volumeMounts:
+      - name: notification-db-data
+        mountPath: /data
+
+postgres:
+  enabled: false
+
+mongodb:
+  enabled: false
+
+redis:
+  enabled: false
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: api.local
+      paths:
+        - path: /
+          pathType: Prefix
+          service: api-gateway
+          port: 3000
+  tls: []

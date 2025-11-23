@@ -1,0 +1,80 @@
+{{- $root := . -}}
+{{- $values := .Values.redis -}}
+{{- if and $values $values.enabled }}
+{{- $name := "redis" -}}
+{{- $hasEnv := and $values.env (gt (len $values.env) 0) -}}
+{{- $hasSecret := and $values.secretEnv (gt (len $values.secretEnv) 0) -}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "nestjs-microservices.component" (dict "root" $root "name" $name) }}
+  labels:
+    {{- include "nestjs-microservices.componentLabels" (dict "root" $root "component" $name) | nindent 4 }}
+spec:
+  ports:
+    - name: tcp
+      port: 6379
+      targetPort: 6379
+      protocol: TCP
+  selector:
+    {{- include "nestjs-microservices.componentSelectorLabels" (dict "root" $root "component" $name) | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nestjs-microservices.component" (dict "root" $root "name" $name) }}
+  labels:
+    {{- include "nestjs-microservices.componentLabels" (dict "root" $root "component" $name) | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "nestjs-microservices.componentSelectorLabels" (dict "root" $root "component" $name) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nestjs-microservices.componentSelectorLabels" (dict "root" $root "component" $name) | nindent 8 }}
+    spec:
+      containers:
+        - name: redis
+          image: {{ $values.image | default "redis:7-alpine" }}
+          ports:
+            - containerPort: 6379
+          command:
+            - redis-server
+            - "--requirepass"
+            - {{ $values.secretEnv.REDIS_PASSWORD | default "redis123" | quote }}
+            - "--appendonly"
+            - "yes"
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          {{- if or $hasEnv $hasSecret }}
+          envFrom:
+            {{- if $hasEnv }}
+            - configMapRef:
+                name: {{ include "nestjs-microservices.configMapName" (dict "root" $root "name" $name) }}
+            {{- end }}
+            {{- if $hasSecret }}
+            - secretRef:
+                name: {{ include "nestjs-microservices.secretName" (dict "root" $root "name" $name) }}
+            {{- end }}
+          {{- end }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "nestjs-microservices.component" (dict "root" $root "name" $name) }}-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "nestjs-microservices.component" (dict "root" $root "name" $name) }}-pvc
+  labels:
+    {{- include "nestjs-microservices.componentLabels" (dict "root" $root "component" $name) | nindent 4 }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: {{ $values.storage | default "2Gi" }}
+{{- end }}

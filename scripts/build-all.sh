@@ -13,7 +13,6 @@ for service in "${services[@]}"; do
     
     if [ -f "package.json" ]; then
         npm install
-        npm run build
         echo "✅ $service construido exitosamente"
     else
         echo "❌ No se encontró package.json en $service"
