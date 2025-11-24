@@ -151,6 +151,88 @@ helm upgrade --install <release> <chart-path> -n <namespace> \
 
 - Estrategia recomendada: usar `umbrella chart` para gestionar gateway, servicios, ingress y stack de observabilidad en conjunto.
 
+### Perfiles de valores disponibles
+
+- `helm/values.dev.yaml`
+  - Pensado para clusters locales (kind/minikube).
+  - Cada pod de microservicio incluye su base de datos como contenedor sidecar (`localDb.enabled=true`).
+  - No despliega los StatefulSets de Postgres/Mongo/Redis dedicados.
+  - Las imágenes usan tags `*:dev`; deben existir en el runtime local o cargarse con `kind load docker-image ...` / `minikube image load ...`.
+
+- `helm/values.prod.yaml`
+  - Orientado a EKS (AWS) u otro entorno gestionado.
+  - Supone imágenes hospedadas en un registro como ECR (`<aws_account_id>.dkr.ecr.<region>.amazonaws.com/...`).
+  - Desactiva los sidecars locales y espera endpoints externos para Postgres/Mongo/Redis.
+  - Activa Ingress (clase `nginx`) y soporta TLS.
+
+### Flujo recomendado (local con minikube/kind)
+
+1. **Crear/usar cluster local**
+   - kind: `kind create cluster --name nestjs`
+   - minikube: `minikube start`
+
+2. **Construir imágenes**
+   ```bash
+   docker build -t api-gateway:dev ./microservices/api-gateway
+   docker build -t user-service:dev ./microservices/user-service
+   docker build -t product-service:dev ./microservices/product-service
+   docker build -t notification-service:dev ./microservices/notification-service
+   ```
+
+3. **Cargar imágenes al cluster local**
+   - kind: `kind load docker-image <imagen:tag>`
+   - minikube: `minikube image load <imagen:tag>`
+
+4. **Desplegar con Helm (perfil dev)**
+   ```bash
+   kubectl create namespace nestjs-ms
+   helm upgrade --install nestjs-dev ./helm \
+     -f helm/values.dev.yaml \
+     -n nestjs-ms
+   kubectl get pods -n nestjs-ms
+   ```
+
+5. **Probar**
+   ```bash
+   kubectl port-forward svc/nestjs-dev-nestjs-microservices-api-gateway 3000:3000 -n nestjs-ms
+   curl http://localhost:3000/health
+   ```
+
+### Flujo recomendado (AWS EKS + kubectl/Helm)
+
+1. **Publicar imágenes en Amazon ECR**
+   ```bash
+   aws ecr get-login-password --region <region> | docker login --username AWS --password-stdin <aws_account_id>.dkr.ecr.<region>.amazonaws.com
+   docker tag api-gateway:prod <aws_account_id>.dkr.ecr.<region>.amazonaws.com/api-gateway:latest
+   docker push <aws_account_id>.dkr.ecr.<region>.amazonaws.com/api-gateway:latest
+   # Repetir para user/product/notification
+   ```
+
+2. **Crear secret de pull en el cluster EKS**
+   ```bash
+   kubectl create secret docker-registry ecr-pull-secret \
+     --docker-server=<aws_account_id>.dkr.ecr.<region>.amazonaws.com \
+     --docker-username=AWS \
+     --docker-password=$(aws ecr get-login-password --region <region>) \
+     -n prod
+   ```
+
+3. **Configurar endpoints externos de DB/Redis**
+   - Actualiza `helm/values.prod.yaml` con hosts, puertos y secretos provistos por tus servicios gestionados (Amazon RDS/Aurora, DocumentDB o Atlas, Amazon ElastiCache, etc.).
+
+4. **Desplegar con perfil prod**
+   ```bash
+   kubectl create namespace prod
+   helm upgrade --install nestjs-prod ./helm \
+     -f helm/values.prod.yaml \
+     -n prod
+   kubectl get pods -n prod
+   ```
+
+5. **Exposición**
+   - El Ingress definido en `values.prod.yaml` expone la API Gateway en `https://api.example.com` (ajusta host y secret TLS).
+   - Si usas AWS Load Balancer Controller o API Gateway/CloudFront, adapta la sección `ingress` en consecuencia.
+
 ---
 
 ## CI/CD
