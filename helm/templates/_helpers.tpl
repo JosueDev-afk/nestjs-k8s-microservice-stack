@@ -29,6 +29,12 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- printf "%s-%s" (include "nestjs-microservices.fullname" $root) $name | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{- define "nestjs-microservices.componentFQDN" -}}
+{{- $root := index . "root" -}}
+{{- $name := index . "name" -}}
+{{- printf "%s.%s.svc.cluster.local" (include "nestjs-microservices.component" (dict "root" $root "name" $name)) $root.Release.Namespace -}}
+{{- end -}}
+
 {{- define "nestjs-microservices.componentLabels" -}}
 {{ include "nestjs-microservices.labels" .root }}
 app.kubernetes.io/component: {{ .component }}

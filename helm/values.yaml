@@ -85,6 +85,237 @@ redis:
     REDIS_PASSWORD: redis123
   storage: 2Gi
 
+monitoring:
+  enabled: true
+  prometheus:
+    enabled: true
+    image: prom/prometheus:v2.51.2
+    scrapeInterval: 15s
+    service:
+      type: ClusterIP
+      port: 9090
+    scrapeTargets: [] 
+    additionalScrapeConfigs: ""
+    resources: {}
+  grafana:
+    enabled: true
+    image: grafana/grafana:10.4.3
+    service:
+      type: ClusterIP
+      port: 3000
+    adminUser: admin
+    adminPassword: admin123
+    datasourceUrl: ""
+    dashboards:
+      microservices-overview: |
+        {
+          "annotations": {
+            "list": [
+              {
+                "builtIn": 1,
+                "datasource": "-- Grafana --",
+                "enable": true,
+                "hide": true,
+                "iconColor": "rgba(0, 211, 255, 1)",
+                "name": "Annotations & Alerts",
+                "type": "dashboard"
+              }
+            ]
+          },
+          "panels": [
+            {
+              "datasource": "Prometheus",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "mappings": [],
+                  "unit": "percentunit"
+                },
+                "overrides": []
+              },
+              "gridPos": {
+                "h": 7,
+                "w": 8,
+                "x": 0,
+                "y": 0
+              },
+              "id": 1,
+              "options": {
+                "colorMode": "value",
+                "graphMode": "none",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "/^service$/",
+                  "values": false
+                },
+                "textMode": "value"
+              },
+              "targets": [
+                {
+                  "expr": "100 * min_over_time(up{job=\"microservices\", instance=~\".*\"}[5m])",
+                  "legendFormat": "Disponibilidad",
+                  "refId": "A"
+                }
+              ],
+              "title": "Disponibilidad (últimos 5m)",
+              "type": "stat"
+            },
+            {
+              "datasource": "Prometheus",
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "bytes"
+                },
+                "overrides": []
+              },
+              "gridPos": {
+                "h": 7,
+                "w": 8,
+                "x": 8,
+                "y": 0
+              },
+              "id": 2,
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom"
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "none"
+                }
+              },
+              "targets": [
+                {
+                  "expr": "avg by (service) (process_resident_memory_bytes{service=~\"$service\"})",
+                  "legendFormat": "{{ '{{' }}service{{ '}}' }}",
+                  "refId": "A"
+                }
+              ],
+              "title": "Memoria RSS por servicio",
+              "type": "timeseries"
+            },
+            {
+              "datasource": "Prometheus",
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "s"
+                },
+                "overrides": []
+              },
+              "gridPos": {
+                "h": 7,
+                "w": 8,
+                "x": 16,
+                "y": 0
+              },
+              "id": 3,
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom"
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "none"
+                }
+              },
+              "targets": [
+                {
+                  "expr": "avg by (service) (nodejs_eventloop_lag_seconds{service=~\"$service\"})",
+                  "legendFormat": "{{ '{{' }}service{{ '}}' }}",
+                  "refId": "A"
+                }
+              ],
+              "title": "Event Loop Lag",
+              "type": "timeseries"
+            },
+            {
+              "datasource": "Prometheus",
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "percentunit"
+                },
+                "overrides": []
+              },
+              "gridPos": {
+                "h": 8,
+                "w": 24,
+                "x": 0,
+                "y": 7
+              },
+              "id": 4,
+              "options": {
+                "legend": {
+                  "displayMode": "table",
+                  "placement": "bottom"
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "none"
+                }
+              },
+              "targets": [
+                {
+                  "expr": "sum by (service) (rate(process_cpu_seconds_total{service=~\"$service\"}[5m]))",
+                  "legendFormat": "{{ '{{' }}service{{ '}}' }}",
+                  "refId": "A"
+                }
+              ],
+              "title": "Consumo de CPU por servicio",
+              "type": "timeseries"
+            }
+          ],
+          "schemaVersion": 38,
+          "tags": [
+            "nestjs",
+            "microservices"
+          ],
+          "templating": {
+            "list": [
+              {
+                "current": {
+                  "selected": false,
+                  "text": "Todos",
+                  "value": [
+                    ".*"
+                  ]
+                },
+                "datasource": "Prometheus",
+                "definition": "label_values(process_resident_memory_bytes, service)",
+                "hide": 0,
+                "includeAll": true,
+                "label": "Servicio",
+                "multi": true,
+                "name": "service",
+                "query": {
+                  "query": "label_values(process_resident_memory_bytes, service)",
+                  "refId": "Prometheus-service-Variable-Query"
+                },
+                "refresh": 1,
+                "regex": "",
+                "sort": 0,
+                "type": "query"
+              }
+            ]
+          },
+          "time": {
+            "from": "now-30m",
+            "to": "now"
+          },
+          "timezone": "",
+          "title": "NestJS Microservices Overview",
+          "uid": "nestjs-microservices-overview",
+          "version": 1
+        }
+    resources: {}
+
 ingress:
   enabled: false
   className: ""

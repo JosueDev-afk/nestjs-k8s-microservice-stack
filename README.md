@@ -167,6 +167,27 @@ helm upgrade --install <release> <chart-path> -n <namespace> \
 
 ### Flujo recomendado (local con minikube/kind)
 
+#### Opción rápida (Kind + Helm en un comando)
+
+```bash
+chmod +x scripts/setup-kind.sh
+./scripts/setup-kind.sh
+```
+
+Variables opcionales (puedes exportarlas antes de ejecutar el script):
+
+| Variable | Descripción | Valor por defecto |
+| --- | --- | --- |
+| `CLUSTER_NAME` | Nombre del clúster Kind | `nestjs-ms` |
+| `K8S_NAMESPACE` | Namespace destino | `nestjs-ms` |
+| `HELM_RELEASE` | Nombre del release Helm | `nestjs-dev` |
+| `HELM_VALUES` | Archivo de valores | `helm/values.dev.yaml` |
+| `IMAGE_TAG` | Tag de las imágenes locales | `dev` |
+
+El script construye todas las imágenes Docker, crea el clúster Kind (si no existe), carga las imágenes y ejecuta `helm upgrade --install` con los valores dev.
+
+#### Opción manual
+
 1. **Crear/usar cluster local**
    - kind: `kind create cluster --name nestjs`
    - minikube: `minikube start`
@@ -248,8 +269,21 @@ helm upgrade --install <release> <chart-path> -n <namespace> \
 ## Observabilidad y autoescalado
 
 - Observabilidad:
-  - `Prometheus` recolecta métricas del clúster y de los servicios.
-  - `Grafana` provee dashboards preconfigurados para rendimiento y salud.
+  - `Prometheus` y `Grafana` pueden desplegarse con el mismo chart (`monitoring.enabled=true`).
+  - En `helm/values.dev.yaml` viene activado por defecto; en `values.prod.yaml` está desactivado para evitar costos innecesarios.
+  - Para habilitarlo en otro entorno:
+    ```bash
+    helm upgrade --install <release> ./helm \
+      --set monitoring.enabled=true \
+      --set monitoring.prometheus.enabled=true \
+      --set monitoring.grafana.enabled=true
+    ```
+  - Acceso local (Kind/minikube):
+    ```bash
+    kubectl port-forward svc/<release>-nestjs-microservices-prometheus 9090:9090 -n <namespace>
+    kubectl port-forward svc/<release>-nestjs-microservices-grafana 8080:3000 -n <namespace>
+    ```
+  - Credenciales iniciales de Grafana: `admin / admin123` (configurable vía `monitoring.grafana.adminUser|adminPassword`).
 
 - Autoescalado (HPA):
   - Define políticas basadas en CPU/memoria para escalar `api-gateway` y servicios críticos.

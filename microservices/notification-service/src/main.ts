@@ -1,6 +1,19 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { collectDefaultMetrics, Registry } from 'prom-client';
+
+function setupMetrics(app: INestApplication, serviceName: string) {
+  const register = new Registry();
+  register.setDefaultLabels({ service: serviceName });
+  collectDefaultMetrics({ register });
+
+  const httpAdapter = app.getHttpAdapter();
+  httpAdapter.get('/metrics', async (_req, res) => {
+    httpAdapter.setHeader(res, 'Content-Type', register.contentType);
+    httpAdapter.reply(res, await register.metrics(), 200);
+  });
+}
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -18,6 +31,8 @@ async function bootstrap() {
     forbidNonWhitelisted: true,
   }));
   
+  setupMetrics(app, 'notification-service');
+
   const port = process.env.PORT || 3003;
   await app.listen(port);
   
