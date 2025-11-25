@@ -67,7 +67,9 @@ Comunicación principal vía HTTP desde el gateway; los servicios pueden comunic
 │   ├── stop-dev.sh
 │   ├── build-all.sh
 │   ├── test-all.sh
-│   └── quick-test.sh
+│   ├── quick-test.sh
+│   ├── port-forward.sh
+│   └── redeploy-kind.sh
 ├── docker-compose.yml
 ├── env.example
 └── README.md
@@ -101,10 +103,12 @@ cp env.example .env
   - `./scripts/start-dev.sh` levanta todos los microservicios en modo desarrollo.
   - `./scripts/stop-dev.sh` detiene todos los microservicios.
   - `./scripts/quick-test.sh` corre tests rápidos donde aplique.
+  - `./scripts/port-forward.sh` abre túneles hacia API Gateway, Prometheus y Grafana en un clúster existente (requiere `kubectl`).
+  - `./scripts/redeploy-kind.sh` recompila imágenes locales, las carga en Kind y vuelve a ejecutar el chart Helm (útil tras cambios en código).
 
 - Usando Docker Compose:
 
-```
+```bash
 docker compose up -d
 docker compose logs -f
 ```
@@ -129,7 +133,7 @@ docker compose logs -f
 
 - Si prefieres construir manualmente por servicio, usa los `Dockerfile` en cada microservicio:
 
-```
+```bash
 docker build -t <tu-registro>/<servicio>:<tag> ./microservices/<servicio>
 ```
 
@@ -144,7 +148,7 @@ docker build -t <tu-registro>/<servicio>:<tag> ./microservices/<servicio>
 
 - Despliegue típico con Helm:
 
-```
+```bash
 helm upgrade --install <release> <chart-path> -n <namespace> \
   --set image.tag=<tag> --values values.yaml
 ```
@@ -303,6 +307,8 @@ El script construye todas las imágenes Docker, crea el clúster Kind (si no exi
 - `./scripts/build-all.sh` — construir todos los servicios.
 - `./scripts/test-all.sh` — ejecutar pruebas.
 - `./scripts/quick-test.sh` — pruebas rápidas.
+- `./scripts/port-forward.sh` — port-forward simultáneo a gateway, Prometheus y Grafana.
+- `./scripts/redeploy-kind.sh` — rebuild + kind load + helm upgrade en clúster local.
 
 ---
 
