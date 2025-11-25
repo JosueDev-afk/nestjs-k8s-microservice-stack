@@ -66,6 +66,30 @@ mongodb:
 redis:
   enabled: false
 
+monitoring:
+  enabled: false
+  prometheus:
+    enabled: true
+    image: prom/prometheus:v2.51.2
+    scrapeInterval: 15s
+    service:
+      type: ClusterIP
+      port: 9090
+    scrapeTargets: []
+    additionalScrapeConfigs: ""
+    resources: {}
+  grafana:
+    enabled: true
+    image: grafana/grafana:10.4.3
+    service:
+      type: ClusterIP
+      port: 3000
+    adminUser: admin
+    adminPassword: admin123
+    datasourceUrl: ""
+    dashboards: {}
+    resources: {}
+
 ingress:
   enabled: true
   className: nginx

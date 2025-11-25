@@ -1,0 +1,233 @@
+{{- $root := . -}}
+{{- $monitoring := .Values.monitoring -}}
+{{- if and $monitoring $monitoring.enabled }}
+
+{{- $prom := $monitoring.prometheus -}}
+{{- if and $prom $prom.enabled }}
+{{- $componentName := "prometheus" -}}
+{{- $promServiceName := include "nestjs-microservices.component" (dict "root" $root "name" $componentName) -}}
+{{- $targets := list -}}
+{{- if $root.Values.apiGateway }}
+{{- $targets = append $targets (dict "host" (include "nestjs-microservices.componentFQDN" (dict "root" $root "name" "api-gateway")) "port" (($root.Values.apiGateway.service.port | default 3000))) }}
+{{- end }}
+{{- if $root.Values.userService }}
+{{- $targets = append $targets (dict "host" (include "nestjs-microservices.componentFQDN" (dict "root" $root "name" "user-service")) "port" (($root.Values.userService.service.port | default 3001))) }}
+{{- end }}
+{{- if $root.Values.productService }}
+{{- $targets = append $targets (dict "host" (include "nestjs-microservices.componentFQDN" (dict "root" $root "name" "product-service")) "port" (($root.Values.productService.service.port | default 3002))) }}
+{{- end }}
+{{- if $root.Values.notificationService }}
+{{- $targets = append $targets (dict "host" (include "nestjs-microservices.componentFQDN" (dict "root" $root "name" "notification-service")) "port" (($root.Values.notificationService.service.port | default 3003))) }}
+{{- end }}
+{{- range $extra := ($prom.scrapeTargets | default (list)) }}
+{{- $targets = append $targets $extra }}
+{{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ printf "%s-config" $promServiceName }}
+  labels:
+    {{- include "nestjs-microservices.componentLabels" (dict "root" $root "component" $componentName) | nindent 4 }}
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: {{ $prom.scrapeInterval | default "15s" }}
+    scrape_configs:
+      - job_name: microservices
+        metrics_path: /metrics
+        static_configs:
+          - targets:
+{{- range $target := $targets }}
+{{- if kindIs "map" $target }}
+              - {{ printf "%s:%v" $target.host $target.port | quote }}
+{{- else }}
+              - {{ $target | quote }}
+{{- end }}
+{{- end }}
+{{- if $prom.additionalScrapeConfigs }}
+{{ tpl $prom.additionalScrapeConfigs $root | nindent 6 }}
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $promServiceName }}
+  labels:
+    {{- include "nestjs-microservices.componentLabels" (dict "root" $root "component" $componentName) | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "nestjs-microservices.componentSelectorLabels" (dict "root" $root "component" $componentName) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nestjs-microservices.componentSelectorLabels" (dict "root" $root "component" $componentName) | nindent 8 }}
+    spec:
+      containers:
+        - name: prometheus
+          image: {{ $prom.image | default "prom/prometheus:latest" }}
+          imagePullPolicy: IfNotPresent
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+          ports:
+            - containerPort: {{ $prom.service.port | default 9090 }}
+              name: http
+          volumeMounts:
+            - name: prometheus-config
+              mountPath: /etc/prometheus
+          {{- if $prom.resources }}
+          resources:
+            {{- toYaml $prom.resources | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: prometheus-config
+          configMap:
+            name: {{ printf "%s-config" $promServiceName }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $promServiceName }}
+  labels:
+    {{- include "nestjs-microservices.componentLabels" (dict "root" $root "component" $componentName) | nindent 4 }}
+spec:
+  type: {{ $prom.service.type | default "ClusterIP" }}
+  ports:
+    - name: http
+      port: {{ $prom.service.port | default 9090 }}
+      targetPort: {{ $prom.service.port | default 9090 }}
+  selector:
+    {{- include "nestjs-microservices.componentSelectorLabels" (dict "root" $root "component" $componentName) | nindent 4 }}
+{{- end }}
+
+{{- $graf := $monitoring.grafana -}}
+{{- if and $graf $graf.enabled }}
+{{- $componentName := "grafana" -}}
+{{- $grafServiceName := include "nestjs-microservices.component" (dict "root" $root "name" $componentName) -}}
+{{- $promServiceName := include "nestjs-microservices.component" (dict "root" $root "name" "prometheus") -}}
+{{- $defaultDatasource := printf "http://%s:%v" $promServiceName (($monitoring.prometheus.service.port | default 9090)) -}}
+{{- $datasourceUrl := $graf.datasourceUrl | default $defaultDatasource -}}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ printf "%s-datasources" $grafServiceName }}
+  labels:
+    {{- include "nestjs-microservices.componentLabels" (dict "root" $root "component" $componentName) | nindent 4 }}
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        url: {{ $datasourceUrl }}
+        access: proxy
+        isDefault: true
+{{- if $graf.dashboards }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ printf "%s-dashboards" $grafServiceName }}
+  labels:
+    {{- include "nestjs-microservices.componentLabels" (dict "root" $root "component" $componentName) | nindent 4 }}
+data:
+{{- range $name, $content := $graf.dashboards }}
+  {{ $name }}.json: |
+{{ tpl $content $root | indent 4 }}
+{{- end }}
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $grafServiceName }}
+  labels:
+    {{- include "nestjs-microservices.componentLabels" (dict "root" $root "component" $componentName) | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "nestjs-microservices.componentSelectorLabels" (dict "root" $root "component" $componentName) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nestjs-microservices.componentSelectorLabels" (dict "root" $root "component" $componentName) | nindent 8 }}
+    spec:
+      containers:
+        - name: grafana
+          image: {{ $graf.image | default "grafana/grafana:latest" }}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              value: {{ $graf.adminUser | default "admin" | quote }}
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: {{ $graf.adminPassword | default "admin123" | quote }}
+          volumeMounts:
+            - name: grafana-datasources
+              mountPath: /etc/grafana/provisioning/datasources
+{{- if $graf.dashboards }}
+            - name: grafana-dashboards
+              mountPath: /var/lib/grafana/dashboards
+            - name: grafana-dashboard-providers
+              mountPath: /etc/grafana/provisioning/dashboards
+{{- end }}
+          ports:
+            - containerPort: {{ $graf.service.port | default 3000 }}
+              name: http
+          {{- if $graf.resources }}
+          resources:
+            {{- toYaml $graf.resources | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: grafana-datasources
+          configMap:
+            name: {{ printf "%s-datasources" $grafServiceName }}
+{{- if $graf.dashboards }}
+        - name: grafana-dashboards
+          configMap:
+            name: {{ printf "%s-dashboards" $grafServiceName }}
+        - name: grafana-dashboard-providers
+          configMap:
+            name: {{ printf "%s-dashboard-providers" $grafServiceName }}
+{{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ printf "%s-dashboard-providers" $grafServiceName }}
+  labels:
+    {{- include "nestjs-microservices.componentLabels" (dict "root" $root "component" $componentName) | nindent 4 }}
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: default
+        orgId: 1
+        folder: ""
+        type: file
+        disableDeletion: false
+        allowUiUpdates: true
+        options:
+          path: /var/lib/grafana/dashboards
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $grafServiceName }}
+  labels:
+    {{- include "nestjs-microservices.componentLabels" (dict "root" $root "component" $componentName) | nindent 4 }}
+spec:
+  type: {{ $graf.service.type | default "ClusterIP" }}
+  ports:
+    - name: http
+      port: {{ $graf.service.port | default 3000 }}
+      targetPort: {{ $graf.service.port | default 3000 }}
+  selector:
+    {{- include "nestjs-microservices.componentSelectorLabels" (dict "root" $root "component" $componentName) | nindent 4 }}
+{{- end }}
+
+{{- end }}
